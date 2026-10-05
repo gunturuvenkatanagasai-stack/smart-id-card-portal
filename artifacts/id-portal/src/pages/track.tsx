@@ -29,11 +29,8 @@ export default function Track() {
   const { data: request, isLoading, isError } = useGetMyRequest(
     { email: searchedEmail || "" },
     {
-      query: {
-        queryKey: ["/api/my-request", searchedEmail],
-        enabled: !!searchedEmail,
-        retry: false,
-      }
+      enabled: !!searchedEmail,
+      retry: false,
     }
   );
 

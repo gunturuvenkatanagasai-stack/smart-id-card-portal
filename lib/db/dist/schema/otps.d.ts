@@ -71,6 +71,40 @@ export declare const otpsTable: import("drizzle-orm/pg-core").PgTableWithColumns
             identity: undefined;
             generated: undefined;
         }, {}, {}>;
+        attempts: import("drizzle-orm/pg-core").PgColumn<{
+            name: "attempts";
+            tableName: "otps";
+            dataType: "number";
+            columnType: "PgInteger";
+            data: number;
+            driverParam: string | number;
+            notNull: true;
+            hasDefault: true;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
+        lockedUntil: import("drizzle-orm/pg-core").PgColumn<{
+            name: "locked_until";
+            tableName: "otps";
+            dataType: "date";
+            columnType: "PgTimestamp";
+            data: Date;
+            driverParam: string;
+            notNull: false;
+            hasDefault: false;
+            isPrimaryKey: false;
+            isAutoincrement: false;
+            hasRuntimeDefault: false;
+            enumValues: undefined;
+            baseColumn: never;
+            identity: undefined;
+            generated: undefined;
+        }, {}, {}>;
         expiresAt: import("drizzle-orm/pg-core").PgColumn<{
             name: "expires_at";
             tableName: "otps";
@@ -112,6 +146,8 @@ export declare const insertOtpSchema: z.ZodObject<{
     email: z.ZodString;
     otp: z.ZodString;
     used: z.ZodOptional<z.ZodBoolean>;
+    attempts: z.ZodOptional<z.ZodInt>;
+    lockedUntil: z.ZodOptional<z.ZodNullable<z.ZodDate>>;
     expiresAt: z.ZodDate;
 }, {
     out: {};

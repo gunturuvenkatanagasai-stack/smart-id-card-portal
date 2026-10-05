@@ -1,91 +1,54 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { useRoute, Link, useLocation } from "wouter";
-import { z } from "zod";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useQueryClient } from "@tanstack/react-query";
-import { 
-  useGetRequest, 
-  getGetRequestQueryKey, 
-  useUpdateRequestStatus, 
-  UpdateStatusBodyStatus 
-} from "@workspace/api-client-react";
+import { useGetRequest, getGetRequestQueryKey, useAdminAction, useGetAuditLogs } from "@workspace/api-client-react";
 import { useAuth } from "@/hooks/use-auth";
+import { useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { StatusBadge } from "@/components/ui/status-badge";
+import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { ArrowLeft, User, FileText, CreditCard, Loader2, Save } from "lucide-react";
-
-const updateSchema = z.object({
-  status: z.enum(["pending", "payment_pending", "approved", "ready_to_collect", "collected"]),
-  adminNote: z.string().optional(),
-});
+import { ArrowLeft, User, FileText, Loader2, Printer, ShieldCheck, CheckCircle2, History, PackageCheck } from "lucide-react";
 
 export default function AdminRequestDetail() {
   const [, params] = useRoute("/admin/requests/:id");
   const id = params?.id ? parseInt(params.id, 10) : 0;
-  const { adminToken } = useAuth();
+  const { staffToken, staffUser } = useAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const queryClient = useQueryClient();
 
-  if (adminToken === null) {
+  const [adminNote, setAdminNote] = useState("");
+
+  if (!staffToken || (staffUser?.role !== "ADMIN" && staffUser?.role !== "SUPER_ADMIN" && staffUser?.role !== "ID_CARD_STAFF")) {
     setLocation("/admin/login");
     return null;
   }
 
-  const { data: request, isLoading } = useGetRequest(id, {
-    query: { enabled: !!id, queryKey: getGetRequestQueryKey(id) }
-  });
+  const { data: request, isLoading } = useGetRequest(id, { enabled: !!id });
+  const { data: auditLogs } = useGetAuditLogs(id, { enabled: !!id });
+  const adminAction = useAdminAction();
 
-  const updateStatus = useUpdateRequestStatus();
-
-  const form = useForm<z.infer<typeof updateSchema>>({
-    resolver: zodResolver(updateSchema),
-    defaultValues: {
-      status: "pending",
-      adminNote: "",
-    },
-  });
-
-  useEffect(() => {
-    if (request) {
-      form.reset({
-        status: request.status as any,
-        adminNote: request.adminNote || "",
-      });
-    }
-  }, [request, form]);
-
-  const onSubmit = (values: z.infer<typeof updateSchema>) => {
-    updateStatus.mutate({ 
-      id, 
-      data: { 
-        status: values.status as UpdateStatusBodyStatus, 
-        adminNote: values.adminNote || null 
-      } 
-    }, {
-      onSuccess: (data) => {
-        toast({ title: "Status Updated Successfully" });
-        queryClient.setQueryData(getGetRequestQueryKey(id), data);
-      },
-      onError: (error) => {
-        toast({
-          variant: "destructive",
-          title: "Update Failed",
-          description: error.data?.error || "Could not update status.",
-        });
+  const handleAction = (action: string) => {
+    adminAction.mutate(
+      { id, token: staffToken, data: { action, note: adminNote.trim() || undefined } },
+      {
+        onSuccess: (data) => {
+          toast({ title: "Status Updated Successfully", description: `Application ${data.requestNumber} status set to ${data.status}.` });
+          queryClient.setQueryData(getGetRequestQueryKey(id), data);
+          setAdminNote("");
+        },
+        onError: (err: any) => {
+          toast({ variant: "destructive", title: "Update Failed", description: err?.message || "Could not update status." });
+        },
       }
-    });
+    );
   };
 
   if (isLoading) {
     return (
-      <div className="flex-1 flex justify-center items-center">
+      <div className="flex-1 flex justify-center items-center py-20">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
@@ -93,10 +56,10 @@ export default function AdminRequestDetail() {
 
   if (!request) {
     return (
-      <div className="flex-1 flex justify-center items-center">
+      <div className="flex-1 flex justify-center items-center py-20">
         <div className="text-center">
           <h2 className="text-2xl font-bold mb-2">Request Not Found</h2>
-          <Link href="/admin"><Button variant="outline">Back to Dashboard</Button></Link>
+          <Link href="/admin"><Button variant="outline">Back to Admin Dashboard</Button></Link>
         </div>
       </div>
     );
@@ -104,161 +67,166 @@ export default function AdminRequestDetail() {
 
   return (
     <div className="flex-1 p-4 md:p-8 bg-muted/10">
-      <div className="container mx-auto max-w-5xl">
-        <div className="mb-6 flex items-center">
-          <Link href="/admin">
-            <Button variant="ghost" size="sm" className="mr-4 -ml-3 text-muted-foreground hover:text-foreground">
-              <ArrowLeft className="w-4 h-4 mr-2" /> Back
-            </Button>
-          </Link>
-          <h1 className="text-2xl font-display font-bold">Request Details</h1>
+      <div className="container mx-auto max-w-5xl space-y-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center">
+            <Link href="/admin">
+              <Button variant="ghost" size="sm" className="mr-3 text-muted-foreground hover:text-foreground">
+                <ArrowLeft className="w-4 h-4 mr-2" /> Back
+              </Button>
+            </Link>
+            <h1 className="text-2xl font-display font-bold">Request Inspection: {request.requestNumber}</h1>
+          </div>
+          <Badge variant="outline" className="font-mono text-xs px-3 py-1 bg-background">
+            {request.status.replace(/_/g, " ")}
+          </Badge>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column - Details */}
+          {/* Left Column — Application Details & Audit Trail */}
           <div className="lg:col-span-2 space-y-6">
             <Card className="border-border/50 shadow-sm">
-              <CardHeader className="flex flex-row items-start justify-between pb-4 border-b">
-                <div>
-                  <CardTitle className="flex items-center text-lg gap-2">
-                    <User className="w-5 h-5 text-muted-foreground" />
-                    Student Information
-                  </CardTitle>
-                </div>
-                <StatusBadge status={request.status} className="text-sm px-3 py-1" />
+              <CardHeader className="pb-3 border-b">
+                <CardTitle className="flex items-center text-base gap-2">
+                  <User className="w-4 h-4 text-primary" />
+                  Student Identity Record
+                </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 grid grid-cols-1 sm:grid-cols-2 gap-6">
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Full Name</div>
-                  <div className="font-medium text-base">{request.studentName}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Register Number</div>
-                  <div className="font-medium font-mono">{request.registerNumber}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Branch</div>
-                  <div className="font-medium">{request.branch}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Academic Year</div>
-                  <div className="font-medium">Year {request.year}, Semester {request.semester}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Email Address</div>
-                  <div className="font-medium">{request.email}</div>
-                </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Mobile Number</div>
-                  <div className="font-medium">{request.mobileNumber}</div>
+              <CardContent className="pt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div className="space-y-2 col-span-2">
+                  <div className="flex justify-between py-1 border-b">
+                    <span className="text-muted-foreground">Full Name:</span>
+                    <span className="font-semibold text-foreground">{request.studentName}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b">
+                    <span className="text-muted-foreground">Register Number:</span>
+                    <span className="font-mono font-bold text-foreground">{request.registerNumber}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b">
+                    <span className="text-muted-foreground">Branch &amp; Year:</span>
+                    <span>{request.branch} ({request.year} Year)</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b">
+                    <span className="text-muted-foreground">Email:</span>
+                    <span className="font-mono">{request.email}</span>
+                  </div>
+                  <div className="flex justify-between py-1 border-b">
+                    <span className="text-muted-foreground">Mobile:</span>
+                    <span>{request.mobileNumber}</span>
+                  </div>
                 </div>
               </CardContent>
             </Card>
 
             <Card className="border-border/50 shadow-sm">
-              <CardHeader className="pb-4 border-b">
-                <CardTitle className="flex items-center text-lg gap-2">
-                  <FileText className="w-5 h-5 text-muted-foreground" />
-                  Application Details
+              <CardHeader className="pb-3 border-b">
+                <CardTitle className="flex items-center text-base gap-2">
+                  <FileText className="w-4 h-4 text-primary" />
+                  Approvals &amp; Application Details
                 </CardTitle>
               </CardHeader>
-              <CardContent className="pt-6 space-y-6">
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Request ID</div>
-                  <div className="font-medium font-mono bg-muted inline-block px-2 py-1 rounded text-sm">{request.requestNumber}</div>
+              <CardContent className="pt-4 space-y-3 text-xs">
+                <div className="p-3 bg-muted/40 rounded-lg border space-y-1">
+                  <div className="font-semibold text-foreground">HOD Approval Record</div>
+                  <p className="text-muted-foreground">Status: {request.hodApprovedAt ? `Approved by ${request.hodApprovedBy || "HOD"}` : "Pending"}</p>
+                  {request.hodNote && <p className="italic">"{request.hodNote}"</p>}
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-1">Submitted On</div>
-                  <div className="font-medium">{new Date(request.createdAt).toLocaleString()}</div>
+
+                <div className="p-3 bg-muted/40 rounded-lg border space-y-1">
+                  <div className="font-semibold text-foreground">Principal Approval Record</div>
+                  <p className="text-muted-foreground">
+                    Status: {request.principalApprovedAt ? `Approved by ${(!request.principalApprovedBy || request.principalApprovedBy === "Principal" || request.principalApprovedBy === "Principal Office" || request.principalApprovedBy.includes("Subba Rao")) ? "Dr. T. Vamsi Kiran" : request.principalApprovedBy.replace(/\s*\(Principal\)$/i, "")}` : "Pending"}
+                  </p>
+                  {request.principalNote && <p className="italic">"{request.principalNote}"</p>}
                 </div>
-                <div>
-                  <div className="text-sm text-muted-foreground mb-2">Reason for Reissue</div>
-                  <div className="bg-muted/50 p-4 rounded-lg text-sm leading-relaxed border">
-                    {request.reason}
+
+                {request.paymentId && (
+                  <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg space-y-1 text-emerald-950">
+                    <div className="font-bold">Payment Verified</div>
+                    <p>Amount: ₹{request.paymentAmount || "200.00"} | TxID: {request.paymentId} ({request.paymentMethod})</p>
                   </div>
-                </div>
+                )}
               </CardContent>
             </Card>
 
-            {request.paymentId && (
-              <Card className="border-border/50 shadow-sm">
-                <CardHeader className="pb-4 border-b">
-                  <CardTitle className="flex items-center text-lg gap-2">
-                    <CreditCard className="w-5 h-5 text-muted-foreground" />
-                    Payment Details
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-6 grid grid-cols-1 sm:grid-cols-3 gap-6">
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Transaction ID</div>
-                    <div className="font-medium font-mono text-sm break-all">{request.paymentId}</div>
+            {/* Audit Logs */}
+            <Card className="border-border/50 shadow-sm">
+              <CardHeader className="pb-3 border-b">
+                <CardTitle className="flex items-center text-base gap-2">
+                  <History className="w-4 h-4 text-primary" />
+                  Audit Trail History
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="pt-4 space-y-2 text-xs">
+                {auditLogs?.map((log) => (
+                  <div key={log.id} className="p-2.5 bg-muted/30 rounded border flex justify-between items-start">
+                    <div>
+                      <span className="font-semibold text-foreground">{log.action}</span>
+                      <p className="text-[11px] text-muted-foreground">{log.user} ({log.role})</p>
+                      {log.remarks && <p className="text-[11px] italic mt-0.5">"{log.remarks}"</p>}
+                    </div>
+                    <span className="font-mono text-[10px] text-muted-foreground">{new Date(log.createdAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}</span>
                   </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Method</div>
-                    <div className="font-medium uppercase">{request.paymentMethod}</div>
-                  </div>
-                  <div>
-                    <div className="text-sm text-muted-foreground mb-1">Amount</div>
-                    <div className="font-bold text-green-600">₹{request.paymentAmount}</div>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
+                ))}
+              </CardContent>
+            </Card>
           </div>
 
-          {/* Right Column - Actions */}
+          {/* Right Column — Pipeline Actions */}
           <div className="lg:col-span-1">
-            <Card className="border-border/50 shadow-sm sticky top-24 border-t-4 border-t-primary">
-              <CardHeader>
-                <CardTitle>Update Status</CardTitle>
-                <CardDescription>Advance the application workflow</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <Form {...form}>
-                  <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
-                    <FormField control={form.control} name="status" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Current Status</FormLabel>
-                        <Select onValueChange={field.onChange} value={field.value}>
-                          <FormControl>
-                            <SelectTrigger>
-                              <SelectValue placeholder="Select Status" />
-                            </SelectTrigger>
-                          </FormControl>
-                          <SelectContent>
-                            <SelectItem value="pending">Pending Verification</SelectItem>
-                            <SelectItem value="payment_pending">Payment Pending</SelectItem>
-                            <SelectItem value="approved">Approved for Print</SelectItem>
-                            <SelectItem value="ready_to_collect">Ready to Collect</SelectItem>
-                            <SelectItem value="collected">Collected</SelectItem>
-                          </SelectContent>
-                        </Select>
-                        <FormMessage />
-                      </FormItem>
-                    )} />
-                    
-                    <FormField control={form.control} name="adminNote" render={({ field }) => (
-                      <FormItem>
-                        <FormLabel>Admin Note (Optional)</FormLabel>
-                        <FormControl>
-                          <Textarea 
-                            placeholder="Add notes visible to the student..." 
-                            className="resize-none"
-                            {...field} 
-                          />
-                        </FormControl>
-                        <FormMessage />
-                        <p className="text-xs text-muted-foreground mt-1">This note will be shown on the student's tracking page.</p>
-                      </FormItem>
-                    )} />
-                    
-                    <Button type="submit" className="w-full" disabled={updateStatus.isPending}>
-                      {updateStatus.isPending ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : <Save className="w-4 h-4 mr-2" />}
-                      Save Changes
-                    </Button>
-                  </form>
-                </Form>
-              </CardContent>
+            <Card className="border-border/50 shadow-sm sticky top-24 border-t-4 border-t-primary space-y-4 p-5">
+              <div>
+                <h3 className="font-bold text-base">Pipeline Status Actions</h3>
+                <p className="text-xs text-muted-foreground">Advance request through verification &amp; printing</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label className="text-xs font-semibold">Admin Note / Remarks</Label>
+                <Textarea
+                  placeholder="Enter note or status remark..."
+                  className="text-xs h-20"
+                  value={adminNote}
+                  onChange={(e) => setAdminNote(e.target.value)}
+                />
+              </div>
+
+              <div className="space-y-2 pt-2">
+                <Button
+                  onClick={() => handleAction("VERIFY")}
+                  disabled={adminAction.isPending || request.status !== "PENDING_ADMIN_VERIFICATION"}
+                  className="w-full justify-start text-xs font-semibold bg-emerald-600 hover:bg-emerald-700"
+                >
+                  <ShieldCheck className="w-4 h-4 mr-2" />
+                  Verify Application (Request Payment)
+                </Button>
+
+                <Button
+                  onClick={() => handleAction("START_PRINTING")}
+                  disabled={adminAction.isPending || (request.status !== "PAYMENT_SUCCESS" && request.status !== "PENDING_ADMIN_VERIFICATION")}
+                  className="w-full justify-start text-xs font-semibold bg-purple-700 hover:bg-purple-800"
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  Start ID Card Printing
+                </Button>
+
+                <Button
+                  onClick={() => handleAction("MARK_READY")}
+                  disabled={adminAction.isPending || (request.status !== "ID_CARD_PRINTING" && request.status !== "ID_CARD_PRINTED" && request.status !== "QUALITY_CHECKED")}
+                  className="w-full justify-start text-xs font-semibold bg-blue-700 hover:bg-blue-800"
+                >
+                  <PackageCheck className="w-4 h-4 mr-2" />
+                  Mark Ready for Collection
+                </Button>
+
+                <Button
+                  onClick={() => handleAction("MARK_COLLECTED")}
+                  disabled={adminAction.isPending || request.status !== "READY_TO_COLLECT"}
+                  className="w-full justify-start text-xs font-semibold bg-teal-700 hover:bg-teal-800"
+                >
+                  <CheckCircle2 className="w-4 h-4 mr-2" />
+                  Confirm Physical Handover (Collected)
+                </Button>
+              </div>
             </Card>
           </div>
         </div>

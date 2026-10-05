@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { FileText, CreditCard, Download, Search, CheckCircle2, AlertCircle, ExternalLink } from "lucide-react";
 import { motion } from "framer-motion";
+import { useAuth } from "@/hooks/use-auth";
 
 const COLLEGE_LOGO = "https://www.mictech.edu.in/images/logo-small.png";
 const CAMPUS_PHOTO_1 = "https://www.mictech.edu.in/images/background/1.jpg";
@@ -11,6 +12,7 @@ const CAMPUS_ABOUT = "https://www.mictech.edu.in/images/education-system.jpg";
 const BUILDING_PHOTO = "https://www.mictech.edu.in/images/resource/about-1.jpg";
 
 export default function Home() {
+  const { studentEmail } = useAuth();
   const steps = [
     {
       title: "Verify Identity",
@@ -77,9 +79,9 @@ export default function Home() {
                 Lost or damaged your college ID? Apply for a replacement entirely online — no HOD visit, no principal's office, no queue. Track your status and collect directly from the ID Card Department.
               </p>
               <div className="flex flex-col sm:flex-row gap-3">
-                <Link href="/login">
+                <Link href={studentEmail ? "/student/dashboard" : "/login"}>
                   <Button size="lg" variant="secondary" className="w-full sm:w-auto font-semibold">
-                    Start Application
+                    {studentEmail ? "Go to Student Dashboard" : "Start Application"}
                   </Button>
                 </Link>
                 <Link href="/track">
